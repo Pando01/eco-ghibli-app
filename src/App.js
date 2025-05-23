@@ -6,15 +6,64 @@ const EcoGhibliApp = () => {
   const [showImpact, setShowImpact] = useState(false);
   const [currentTab, setCurrentTab] = useState('home');
   
-  const handleGenerate = () => {
-    setGeneratedImage(true);
-    setTimeout(() => setShowImpact(true), 1000);
+  // 새로 추가된 state들
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState('');
+  const [userPrompt, setUserPrompt] = useState('');
+  
+  // 실제 이미지 생성 함수
+  const generateGhibliImage = async (prompt) => {
+    try {
+      // Studio Ghibli 스타일 프롬프트 생성
+      const ghibliPrompt = `Studio Ghibli style, ${prompt}, anime, beautiful, detailed, warm colors, Miyazaki style`;
+      const encodedPrompt = encodeURIComponent(ghibliPrompt);
+      
+      // Pollinations.ai 무료 API 사용
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${Date.now()}&model=flux`;
+      
+      return imageUrl;
+    } catch (error) {
+      console.error("이미지 생성 오류:", error);
+      return null;
+    }
+  };
+
+  // 수정된 handleGenerate 함수
+  const handleGenerate = async () => {
+    if (!userPrompt.trim()) {
+      alert("프롬프트를 입력해주세요!");
+      return;
+    }
+    
+    setIsGenerating(true);
+    
+    try {
+      // 실제 이미지 생성
+      const imageUrl = await generateGhibliImage(userPrompt);
+      
+      if (imageUrl) {
+        setGeneratedImageUrl(imageUrl);
+        setGeneratedImage(true);
+        // 이미지 로딩 시간을 고려해서 조금 더 기다린 후 환경 영향 표시
+        setTimeout(() => setShowImpact(true), 3000);
+      } else {
+        alert("이미지 생성에 실패했습니다. 다시 시도해주세요.");
+      }
+    } catch (error) {
+      console.error("생성 오류:", error);
+      alert("이미지 생성 중 오류가 발생했습니다.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const resetApp = () => {
     setGeneratedImage(false);
     setShowImpact(false);
     setCurrentTab('home');
+    setGeneratedImageUrl('');
+    setUserPrompt('');
+    setIsGenerating(false);
   };
 
   const renderHomeScreen = () => (
@@ -44,25 +93,57 @@ const EcoGhibliApp = () => {
             <p className="text-gray-600 mb-4 text-center">지브리 스타일의 이미지를 생성해보세요</p>
             <input 
               className="w-4/5 p-2 border border-gray-300 rounded-lg mb-2 text-sm"
-              placeholder="예: 숲속에 있는 작은 집과 토토로" 
+              placeholder="예: 숲속에 있는 작은 집과 토토로"
+              value={userPrompt}
+              onChange={(e) => setUserPrompt(e.target.value)}
+              disabled={isGenerating}
+              onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
             />
             <button 
               onClick={handleGenerate}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center"
+              disabled={isGenerating || !userPrompt.trim()}
+              className={`px-4 py-2 rounded-lg flex items-center ${
+                isGenerating || !userPrompt.trim()
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700'
+              } text-white transition-colors`}
             >
-              이미지 생성하기 <Send className="w-4 h-4 ml-2" />
+              {isGenerating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  생성 중...
+                </>
+              ) : (
+                <>
+                  이미지 생성하기 <Send className="w-4 h-4 ml-2" />
+                </>
+              )}
             </button>
           </div>
         ) : (
           <>
             <div className="w-full h-64 bg-green-100 rounded-lg flex items-center justify-center overflow-hidden mb-4">
-              <div className="w-full h-full bg-gradient-to-br from-green-200 to-blue-200 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-6xl mb-2">🏠</div>
-                  <div className="text-2xl">🌲</div>
-                  <p className="text-sm text-green-800 mt-2">지브리 스타일 완성!</p>
+              {generatedImageUrl ? (
+                <img 
+                  src={generatedImageUrl} 
+                  alt="생성된 지브리 스타일 이미지"
+                  className="w-full h-full object-cover rounded-lg"
+                  onError={() => {
+                    // 이미지 로딩 실패 시 기본 UI로 변경
+                    console.log("이미지 로딩 실패, 기본 UI로 변경");
+                  }}
+                  onLoad={() => {
+                    console.log("이미지 로딩 완료!");
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-green-200 to-blue-200 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+                    <p className="text-sm text-green-800">이미지 생성 중...</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             
             {showImpact && (
@@ -99,9 +180,16 @@ const EcoGhibliApp = () => {
                 
                 <button 
                   onClick={() => setCurrentTab('activity')}
-                  className="w-full bg-green-600 text-white py-2 rounded-lg"
+                  className="w-full bg-green-600 text-white py-2 rounded-lg mb-2"
                 >
                   실천하고 에코 포인트 받기
+                </button>
+                
+                <button 
+                  onClick={resetApp}
+                  className="w-full bg-gray-500 text-white py-2 rounded-lg"
+                >
+                  새 이미지 생성하기
                 </button>
               </div>
             )}
