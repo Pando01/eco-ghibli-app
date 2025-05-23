@@ -5,73 +5,27 @@ const EcoGhibliApp = () => {
   const [generatedImage, setGeneratedImage] = useState(false);
   const [showImpact, setShowImpact] = useState(false);
   const [currentTab, setCurrentTab] = useState('home');
-  
-  // 새로 추가된 state들
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState('');
   const [userPrompt, setUserPrompt] = useState('');
-  const [generationStatus, setGenerationStatus] = useState('');
   
-  // 상태 메시지들
-  const statusMessages = [
-    "AI가 지브리 스타일을 학습하고 있어요...",
-    "미야자키 하야오의 마법을 불러오고 있어요...",
-    "토토로가 도와주고 있어요...",
-    "거의 완성되었어요!"
-  ];
-  
-  // 개선된 이미지 생성 함수
-  const generateGhibliImage = async (prompt, retryCount = 0) => {
-    const maxRetries = 3;
-    
+  // Pollinations.ai를 사용한 이미지 생성 함수
+  const generateGhibliImage = async (prompt) => {
     try {
-      const ghibliPrompt = `Studio Ghibli style, ${prompt}, anime, beautiful, detailed, warm colors, Miyazaki style`;
+      // Studio Ghibli 스타일 프롬프트 생성
+      const ghibliPrompt = `Studio Ghibli style, ${prompt}, anime, beautiful, detailed, warm colors, Miyazaki style, high quality`;
       const encodedPrompt = encodeURIComponent(ghibliPrompt);
       
-      // 여러 모델 옵션 시도
-      const models = ['flux', 'flux-realism', 'flux-3d'];
-      const currentModel = models[retryCount % models.length];
+      // Pollinations.ai API 사용
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${Date.now()}&model=flux`;
       
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${Date.now()}&model=${currentModel}`;
-      
-      // 이미지가 실제로 로드되는지 확인
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        
-        img.onload = () => {
-          resolve(imageUrl);
-        };
-        
-        img.onerror = () => {
-          if (retryCount < maxRetries) {
-            console.log(`재시도 ${retryCount + 1}/${maxRetries}`);
-            setGenerationStatus(`재시도 중... (${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => {
-              generateGhibliImage(prompt, retryCount + 1)
-                .then(resolve)
-                .catch(reject);
-            }, 2000 * (retryCount + 1)); // 점진적으로 대기 시간 증가
-          } else {
-            reject(new Error('이미지 생성에 실패했습니다.'));
-          }
-        };
-        
-        img.src = imageUrl;
-      });
-      
+      return imageUrl;
     } catch (error) {
-      if (retryCount < maxRetries) {
-        console.log(`오류 발생, 재시도 ${retryCount + 1}/${maxRetries}:`, error);
-        setGenerationStatus(`오류 발생, 재시도 중... (${retryCount + 1}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return generateGhibliImage(prompt, retryCount + 1);
-      }
+      console.error("이미지 생성 오류:", error);
       throw error;
     }
   };
 
-  // 개선된 handleGenerate 함수
   const handleGenerate = async () => {
     if (!userPrompt.trim()) {
       alert("프롬프트를 입력해주세요!");
@@ -81,36 +35,19 @@ const EcoGhibliApp = () => {
     setIsGenerating(true);
     setGeneratedImage(false);
     setShowImpact(false);
-    setGenerationStatus('');
-    
-    // 상태 메시지 순차 표시
-    let messageIndex = 0;
-    const statusInterval = setInterval(() => {
-      if (messageIndex < statusMessages.length) {
-        setGenerationStatus(statusMessages[messageIndex]);
-        messageIndex++;
-      }
-    }, 2000);
     
     try {
       const imageUrl = await generateGhibliImage(userPrompt);
       
-      clearInterval(statusInterval);
-      setGenerationStatus('완성!');
-      
       if (imageUrl) {
         setGeneratedImageUrl(imageUrl);
         setGeneratedImage(true);
-        setTimeout(() => {
-          setShowImpact(true);
-          setGenerationStatus('');
-        }, 2000);
+        // 이미지 로딩 시간을 고려해서 환경 영향 표시
+        setTimeout(() => setShowImpact(true), 3000);
       }
     } catch (error) {
-      clearInterval(statusInterval);
       console.error("생성 오류:", error);
-      setGenerationStatus('');
-      alert(`이미지 생성에 실패했습니다. 😢\n\n가능한 원인:\n• 서버가 일시적으로 바쁨\n• 네트워크 연결 문제\n• 프롬프트에 제한된 단어 포함\n\n잠시 후 다른 프롬프트로 다시 시도해주세요!`);
+      alert("이미지 생성에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setIsGenerating(false);
     }
@@ -123,7 +60,6 @@ const EcoGhibliApp = () => {
     setGeneratedImageUrl('');
     setUserPrompt('');
     setIsGenerating(false);
-    setGenerationStatus('');
   };
 
   const renderHomeScreen = () => (
@@ -157,7 +93,7 @@ const EcoGhibliApp = () => {
               value={userPrompt}
               onChange={(e) => setUserPrompt(e.target.value)}
               disabled={isGenerating}
-              onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
+              onKeyPress={(e) => e.key === 'Enter' && !isGenerating && handleGenerate()}
             />
             <button 
               onClick={handleGenerate}
@@ -179,11 +115,6 @@ const EcoGhibliApp = () => {
                 </>
               )}
             </button>
-            {generationStatus && (
-              <p className="text-sm text-green-600 mt-2 text-center animate-pulse">
-                {generationStatus}
-              </p>
-            )}
           </div>
         ) : (
           <>
@@ -193,22 +124,24 @@ const EcoGhibliApp = () => {
                   src={generatedImageUrl} 
                   alt="생성된 지브리 스타일 이미지"
                   className="w-full h-full object-cover rounded-lg"
-                  onError={() => {
-                    // 이미지 로딩 실패 시 기본 UI로 변경
-                    console.log("이미지 로딩 실패, 기본 UI로 변경");
+                  onError={(e) => {
+                    console.log("이미지 로딩 실패");
+                    // 이미지 로딩 실패 시 기본 이미지로 변경
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
                   }}
                   onLoad={() => {
                     console.log("이미지 로딩 완료!");
                   }}
                 />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-green-200 to-blue-200 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
-                    <p className="text-sm text-green-800">이미지 생성 중...</p>
-                  </div>
+              ) : null}
+              <div className="w-full h-full bg-gradient-to-br from-green-200 to-blue-200 flex items-center justify-center" style={{display: generatedImageUrl ? 'none' : 'flex'}}>
+                <div className="text-center">
+                  <div className="text-6xl mb-2">🏠</div>
+                  <div className="text-2xl">🌲</div>
+                  <p className="text-sm text-green-800 mt-2">지브리 스타일 완성!</p>
                 </div>
-              )}
+              </div>
             </div>
             
             {showImpact && (
