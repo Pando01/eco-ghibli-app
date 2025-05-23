@@ -10,25 +10,68 @@ const EcoGhibliApp = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState('');
   const [userPrompt, setUserPrompt] = useState('');
+  const [generationStatus, setGenerationStatus] = useState('');
   
-  // 실제 이미지 생성 함수
-  const generateGhibliImage = async (prompt) => {
+  // 상태 메시지들
+  const statusMessages = [
+    "AI가 지브리 스타일을 학습하고 있어요...",
+    "미야자키 하야오의 마법을 불러오고 있어요...",
+    "토토로가 도와주고 있어요...",
+    "거의 완성되었어요!"
+  ];
+  
+  // 개선된 이미지 생성 함수
+  const generateGhibliImage = async (prompt, retryCount = 0) => {
+    const maxRetries = 3;
+    
     try {
-      // Studio Ghibli 스타일 프롬프트 생성
       const ghibliPrompt = `Studio Ghibli style, ${prompt}, anime, beautiful, detailed, warm colors, Miyazaki style`;
       const encodedPrompt = encodeURIComponent(ghibliPrompt);
       
-      // Pollinations.ai 무료 API 사용
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${Date.now()}&model=flux`;
+      // 여러 모델 옵션 시도
+      const models = ['flux', 'flux-realism', 'flux-3d'];
+      const currentModel = models[retryCount % models.length];
       
-      return imageUrl;
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${Date.now()}&model=${currentModel}`;
+      
+      // 이미지가 실제로 로드되는지 확인
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+          resolve(imageUrl);
+        };
+        
+        img.onerror = () => {
+          if (retryCount < maxRetries) {
+            console.log(`재시도 ${retryCount + 1}/${maxRetries}`);
+            setGenerationStatus(`재시도 중... (${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => {
+              generateGhibliImage(prompt, retryCount + 1)
+                .then(resolve)
+                .catch(reject);
+            }, 2000 * (retryCount + 1)); // 점진적으로 대기 시간 증가
+          } else {
+            reject(new Error('이미지 생성에 실패했습니다.'));
+          }
+        };
+        
+        img.src = imageUrl;
+      });
+      
     } catch (error) {
-      console.error("이미지 생성 오류:", error);
-      return null;
+      if (retryCount < maxRetries) {
+        console.log(`오류 발생, 재시도 ${retryCount + 1}/${maxRetries}:`, error);
+        setGenerationStatus(`오류 발생, 재시도 중... (${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return generateGhibliImage(prompt, retryCount + 1);
+      }
+      throw error;
     }
   };
 
-  // 수정된 handleGenerate 함수
+  // 개선된 handleGenerate 함수
   const handleGenerate = async () => {
     if (!userPrompt.trim()) {
       alert("프롬프트를 입력해주세요!");
@@ -36,22 +79,38 @@ const EcoGhibliApp = () => {
     }
     
     setIsGenerating(true);
+    setGeneratedImage(false);
+    setShowImpact(false);
+    setGenerationStatus('');
+    
+    // 상태 메시지 순차 표시
+    let messageIndex = 0;
+    const statusInterval = setInterval(() => {
+      if (messageIndex < statusMessages.length) {
+        setGenerationStatus(statusMessages[messageIndex]);
+        messageIndex++;
+      }
+    }, 2000);
     
     try {
-      // 실제 이미지 생성
       const imageUrl = await generateGhibliImage(userPrompt);
+      
+      clearInterval(statusInterval);
+      setGenerationStatus('완성!');
       
       if (imageUrl) {
         setGeneratedImageUrl(imageUrl);
         setGeneratedImage(true);
-        // 이미지 로딩 시간을 고려해서 조금 더 기다린 후 환경 영향 표시
-        setTimeout(() => setShowImpact(true), 3000);
-      } else {
-        alert("이미지 생성에 실패했습니다. 다시 시도해주세요.");
+        setTimeout(() => {
+          setShowImpact(true);
+          setGenerationStatus('');
+        }, 2000);
       }
     } catch (error) {
+      clearInterval(statusInterval);
       console.error("생성 오류:", error);
-      alert("이미지 생성 중 오류가 발생했습니다.");
+      setGenerationStatus('');
+      alert(`이미지 생성에 실패했습니다. 😢\n\n가능한 원인:\n• 서버가 일시적으로 바쁨\n• 네트워크 연결 문제\n• 프롬프트에 제한된 단어 포함\n\n잠시 후 다른 프롬프트로 다시 시도해주세요!`);
     } finally {
       setIsGenerating(false);
     }
@@ -64,6 +123,7 @@ const EcoGhibliApp = () => {
     setGeneratedImageUrl('');
     setUserPrompt('');
     setIsGenerating(false);
+    setGenerationStatus('');
   };
 
   const renderHomeScreen = () => (
@@ -119,6 +179,11 @@ const EcoGhibliApp = () => {
                 </>
               )}
             </button>
+            {generationStatus && (
+              <p className="text-sm text-green-600 mt-2 text-center animate-pulse">
+                {generationStatus}
+              </p>
+            )}
           </div>
         ) : (
           <>
